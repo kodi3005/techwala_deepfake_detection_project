@@ -31,6 +31,19 @@ backend/uploads/
 uploads/
 *.log
 
+# Large Model Files (too big for GitHub)
+*.onnx
+*.pt
+*.pth
+*.h5
+*.pkl
+*.bin
+model.onnx
+
+# Python virtual environment
+backend/venv/
+backend/.venv/
+
 # IDE & System Files
 .vscode/
 .idea/
