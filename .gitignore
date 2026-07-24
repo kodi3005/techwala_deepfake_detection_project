@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+venv/
+.venv/
+env/
+
+# Next.js
+.next/
+frontend/.next/
+out/
+frontend/out/
+build/
+
+# Python / Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environment Variables
+.env
+.env.local
+frontend/.env.local
+.env.production
+.env.development
+
+# Uploads & Ephemeral Temp Storage
+backend/uploads/
+uploads/
+*.log
+
+# IDE & System Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.user
