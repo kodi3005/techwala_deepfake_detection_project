@@ -353,7 +353,7 @@ flowchart TD
         subgraph Preprocessing["Tensor Preprocessing"]
             T1["1. Resize to (224, 224)"]
             T2["2. BGR to RGB Conversion"]
-            T3["3. Scale Pixels to [0.0, 1.0]"]
+            T3["3. Scale Pixels to 0.0 - 1.0"]
             T4["4. ImageNet Mean/Std Normalization"]
             T5["5. Transpose HWC (224,224,3) to CHW (3,224,224)"]
         end
@@ -376,21 +376,24 @@ flowchart TD
 
     INPUT --> YUNET
     YUNET --> T1
-    T1 --> T2 --> T3 --> T4 --> T5
+    T1 --> T2
+    T2 --> T3
+    T3 --> T4
+    T4 --> T5
     T5 --> ONNX
     ONNX --> CALIB
     CALIB --> BLEND
     BLEND --> OUTPUT
 
-    CALIB -.->"Uncertain Sample Push"| BUF
+    CALIB -.->|Uncertain Sample Push| BUF
     BUF --> GEN
     GEN --> TRAIN
     TRAIN --> GATE
     GATE --> LOG
     LOG --> DECISION
-    DECISION -->|"Promote"| DEPLOY
-    DECISION -->|"Reject"| LOG
-    DEPLOY -.->"Live Weight Injection"| BLEND
+    DECISION -->|Promote| DEPLOY
+    DECISION -->|Reject| LOG
+    DEPLOY -.->|Live Weight Injection| BLEND
 ```
 
 ---
