@@ -126,7 +126,7 @@ flowchart TB
 
     IMG_ENDPOINT --> YUNET
     YUNET -->|Face Crops| PREPROC
-    PREPROC -->|Tensor [N,3,224,224]| ONNX
+    PREPROC -->|"Tensor [N,3,224,224]"| ONNX
     ONNX -->|Real / Fake Scores| IMG_ENDPOINT
 
     VID_ENDPOINT --> VIDEO_PROC
