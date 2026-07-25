@@ -344,41 +344,53 @@ Access the web interface at `http://localhost:3000`.
 
 ## 10. AI / ML Workflow
 
-```
-[ Input BGR Image ]
-        │
-        ▼
-[ YuNet Face Detection ] ──► (Locates faces, applies 20% box margin)
-        │
-        ▼
-[ Tensor Transformation ]
-  ├── 1. Resize to (224, 224)
-  ├── 2. BGR ──► RGB conversion
-  ├── 3. Scale pixel values to [0.0, 1.0]
-  ├── 4. Apply ImageNet Mean/Std Normalization
-  └── 5. Transpose HWC (224, 224, 3) ──► CHW (3, 224, 224)
-        │
-        ▼
-[ ONNX Runtime Batch Session ]
-  ├── Input Tensor Shape: [Batch_Size, 3, 224, 224]
-  └── Execution Provider: CPUExecutionProvider / CUDAExecutionProvider
-        │
-        ▼
-[ Softmax / Sigmoid Probability Calibration ]
-  └── Output Tuple: (real_probability, fake_probability)
-        │
-        ▼
-[ CASDE Adaptive Head Blend ] ──► (if head trained on ≥ 20 uncertain samples)
-  ├── Base ONNX score × 0.65
-  └── SGDClassifier head score × 0.35
-        │
-        ▼
-[ Final Blended (real_score, fake_score) ]
+```mermaid
+flowchart TD
+    subgraph InferencePipeline["Inference Pipeline (Real-Time Forensic Scan)"]
+        INPUT["Input BGR Image / Video Frame"]
+        YUNET["YuNet Face Detection<br/>(Locates faces, applies 20% box margin)"]
+        
+        subgraph Preprocessing["Tensor Preprocessing"]
+            T1["1. Resize to (224, 224)"]
+            T2["2. BGR to RGB Conversion"]
+            T3["3. Scale Pixels to [0.0, 1.0]"]
+            T4["4. ImageNet Mean/Std Normalization"]
+            T5["5. Transpose HWC (224,224,3) to CHW (3,224,224)"]
+        end
 
-CASDE Self-Learning Loop (background daemon):
-  SampleBuffer (uncertain crops) → AttackGenerator (8 families × 5 intensities)
-  → ContinualTrainer.partial_fit() → ValidationGate (AUC / latency)
-  → EvolutionLog (SQLite) → [Promote | Reject]
+        ONNX["ONNX Runtime Session<br/>(CPU / CUDA Execution Provider)"]
+        CALIB["Softmax / Sigmoid Calibration<br/>Output: (real_prob, fake_prob)"]
+        BLEND["CASDE Adaptive Head Blend<br/>Base ONNX (0.65) + SGD Head (0.35)"]
+        OUTPUT["Final Verdict & Confidence Score"]
+    end
+
+    subgraph CASDE_Loop["CASDE Continual Self-Learning Loop (Background Daemon)"]
+        BUF["Sample Buffer<br/>(Uncertain Inference Crops)"]
+        GEN["Attack Generator<br/>(8 Families x 5 Intensities)"]
+        TRAIN["Continual Trainer<br/>(SGDClassifier partial_fit)"]
+        GATE["Validation Gate<br/>(AUC & Latency Verification)"]
+        LOG["Evolution Ledger<br/>(SQLite Ledger)"]
+        DECISION{"Validation Passed?"}
+        DEPLOY["Promote & Update Active Model Head"]
+    end
+
+    INPUT --> YUNET
+    YUNET --> T1
+    T1 --> T2 --> T3 --> T4 --> T5
+    T5 --> ONNX
+    ONNX --> CALIB
+    CALIB --> BLEND
+    BLEND --> OUTPUT
+
+    CALIB -.->"Uncertain Sample Push"| BUF
+    BUF --> GEN
+    GEN --> TRAIN
+    TRAIN --> GATE
+    GATE --> LOG
+    LOG --> DECISION
+    DECISION -->|"Promote"| DEPLOY
+    DECISION -->|"Reject"| LOG
+    DEPLOY -.->"Live Weight Injection"| BLEND
 ```
 
 ---
