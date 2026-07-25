@@ -9,6 +9,10 @@ onnxruntime>=1.18.0          # use onnxruntime-gpu for CUDA
 numpy>=1.26.0
 opencv-python-headless>=4.9.0
 
+# ── CASDE – Continual Adversarial Self-Learning Engine ─────────────────────
+scikit-learn>=1.4.0          # SGDClassifier incremental learning
+skl2onnx>=1.16.0             # Export sklearn head as ONNX (optional but recommended)
+
 # ── Utilities ──────────────────────────────────────────────────────────────
 python-dotenv>=1.0.0
 aiofiles>=23.2.1

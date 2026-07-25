@@ -24,6 +24,8 @@ from app.services.model_service import get_model
 from app.services.face_detector import detect_faces
 from app.services.video_processor import analyse_video
 from app.utils.report_generator import build_json_report
+from app.services.sample_buffer import get_buffer
+from app.services.continual_trainer import get_trainer
 
 logger = logging.getLogger("uvicorn.error")
 router = APIRouter(prefix="/api/v1/detect", tags=["detection"])
@@ -83,18 +85,32 @@ async def detect_image(file: UploadFile = File(...)):
         predictions  = model.predict_batch(crops)
 
         face_results = []
+        buf      = get_buffer()
+        trainer  = get_trainer()
         for i, ((x, y, w, h), (real_s, fake_s)) in enumerate(
             zip(boxes, predictions)
         ):
-            lbl = "Real" if real_s >= fake_s else "Fake"
+            # ── Adaptive head augmentation ─────────────────────────────────
+            aug_real, aug_fake = trainer.augment_prediction(
+                model, crops[i], real_s, fake_s
+            )
+            lbl = "Real" if aug_real >= aug_fake else "Fake"
             face_results.append(
                 FaceResult(
                     face_id=i,
                     bbox=BoundingBox(x=x, y=y, width=w, height=h),
-                    real_score=round(real_s, 4),
-                    fake_score=round(fake_s, 4),
+                    real_score=round(aug_real, 4),
+                    fake_score=round(aug_fake, 4),
                     label=lbl,
                 )
+            )
+            # ── Push uncertain sample to CASDE buffer ────────────────────────
+            buf.push(
+                image=crops[i],
+                fake_score=aug_fake,
+                real_score=aug_real,
+                source="image",
+                filename=file.filename or path.name,
             )
 
         fake_scores  = [f.fake_score for f in face_results]

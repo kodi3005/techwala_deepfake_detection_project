@@ -28,7 +28,7 @@
 ## 1. Project Title and Team Details
 
 * **Project Name**: DeepGuard – AI Deepfake & Synthetic Media Forensics Platform
-* **Version**: `v1.0.0-PRO`
+* **Version**: `v2.0.0-CASDE`
 * **Target Domain**: Cybersecurity, Media Integrity, Digital Forensics, AI Ethics
 
 ### 👥 Team Details
@@ -60,6 +60,7 @@ DeepGuard provides a production-ready, full-stack forensic intelligence web plat
 - 🔒 **User Authentication & History Tracking**: Integrated with **Supabase Auth** for persistent user sessions and inspection history tracking.
 - ⚡ **ONNX Inference Acceleration**: Supports CPU Execution Provider & NVIDIA CUDA GPU Acceleration for sub-150ms image inference.
 - 🎨 **Mild Ocean Blue Design System**: Built with modern typography (Inter & JetBrains Mono), smooth micro-animations (Framer Motion), and glassmorphism.
+- 🤖 **CASDE Engine** *(NEW)*: Continual Adversarial Self-Learning Detection Engine — automatically generates emerging deepfake attack variants, retrains the inference pipeline, and continuously adapts the detection model without manual redesign.
 
 ---
 
@@ -80,6 +81,8 @@ DeepGuard provides a production-ready, full-stack forensic intelligence web plat
 * **Computer Vision**: OpenCV (`cv2` with YuNet ONNX face model)
 * **Data Processing**: NumPy, SciPy
 * **Validation**: Pydantic v2
+* **Continual Learning (CASDE)**: scikit-learn `SGDClassifier` (online head training) + `skl2onnx` (ONNX head export)
+* **Evolution Ledger**: SQLite (via Python `sqlite3`) — zero-dependency, local audit log
 
 ### 🗄️ Database & Services
 * **Database**: PostgreSQL (via Supabase)
@@ -158,21 +161,28 @@ flowchart TB
 c:\df\
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app initialization & CORS middleware
+│   │   ├── main.py              # FastAPI app init, CORS, CASDE engine startup
 │   │   ├── config.py            # Global settings (upload limits, paths, model settings)
 │   │   ├── routers/
-│   │   │   ├── detect.py        # /api/v1/detect/image, /video, /report endpoints
-│   │   │   └── health.py        # /health status endpoint
+│   │   │   ├── detect.py        # /api/v1/detect/* — inference + CASDE buffer push
+│   │   │   ├── health.py        # /health status endpoint
+│   │   │   └── casde_router.py  # /api/v1/casde/* — engine status, history, trigger
 │   │   ├── schemas/
-│   │   │   └── detection.py     # Pydantic schemas for request/response payloads
+│   │   │   ├── detection.py     # Pydantic schemas for detection responses
+│   │   │   └── casde_schemas.py # Pydantic schemas for CASDE API responses
 │   │   ├── services/
-│   │   │   ├── model_service.py # Singleton ONNX Runtime inference manager
-│   │   │   ├── face_detector.py # OpenCV YuNet face detection & fallback
-│   │   │   └── video_processor.py# Video frame sampler & batch execution
+│   │   │   ├── model_service.py      # Singleton ONNX Runtime inference manager
+│   │   │   ├── face_detector.py      # OpenCV YuNet face detection & fallback
+│   │   │   ├── video_processor.py    # Video frame sampler & batch execution
+│   │   │   ├── adversarial_engine.py # CASDE orchestrator (daemon thread)
+│   │   │   ├── attack_generator.py   # 8-family synthetic attack variant generator
+│   │   │   ├── continual_trainer.py  # SGDClassifier head trainer + ONNX export
+│   │   │   ├── sample_buffer.py      # Thread-safe uncertainty sample ring buffer
+│   │   │   └── evolution_log.py      # SQLite evolution cycle ledger
 │   │   └── utils/
-│   │       └── report_generator.py # JSON report builder
-│   ├── uploads/                 # Ephemeral upload folder (cleaned up automatically)
-│   ├── requirements.txt         # Python dependencies
+│   │       └── report_generator.py   # JSON forensic report builder
+│   ├── uploads/                 # Ephemeral upload folder (auto-cleaned)
+│   ├── requirements.txt         # Python dependencies (incl. scikit-learn, skl2onnx)
 │   └── venv/                    # Python virtual environment
 │
 ├── frontend/
@@ -181,6 +191,7 @@ c:\df\
 │   │   ├── page.tsx             # Main Scan Hub dashboard
 │   │   ├── globals.css          # Glassmorphism & mild ocean color utility styles
 │   │   ├── history/page.tsx     # Past scans & forensic history view
+│   │   ├── casde/page.tsx       # CASDE Engine dashboard (overview/history/attacks)
 │   │   ├── login/page.tsx       # Auth login page
 │   │   └── signup/page.tsx      # Auth signup page
 │   ├── components/
@@ -309,6 +320,26 @@ Access the web interface at `http://localhost:3000`.
 * **Method**: `GET`
 * **Response**: `{"status": "ok", "model_loaded": true, "device": "CPUExecutionProvider"}`
 
+#### 5. CASDE Engine Status
+* **URL**: `/api/v1/casde/status`
+* **Method**: `GET`
+* **Response**: Full engine state — buffer stats, trainer status, evolution summary.
+
+#### 6. CASDE Evolution History
+* **URL**: `/api/v1/casde/history?limit=20`
+* **Method**: `GET`
+* **Response**: List of evolution cycles with attack variants, AUC before/after, promotion status.
+
+#### 7. Manual CASDE Trigger
+* **URL**: `/api/v1/casde/trigger`
+* **Method**: `POST`
+* **Response**: `{"message": "CASDE cycle triggered", "cycle": 1}`
+
+#### 8. Attack Catalogue
+* **URL**: `/api/v1/casde/attacks`
+* **Method**: `GET`
+* **Response**: All 8 attack families with descriptions and intensity levels.
+
 ---
 
 ## 10. AI / ML Workflow
@@ -335,6 +366,19 @@ Access the web interface at `http://localhost:3000`.
         ▼
 [ Softmax / Sigmoid Probability Calibration ]
   └── Output Tuple: (real_probability, fake_probability)
+        │
+        ▼
+[ CASDE Adaptive Head Blend ] ──► (if head trained on ≥ 20 uncertain samples)
+  ├── Base ONNX score × 0.65
+  └── SGDClassifier head score × 0.35
+        │
+        ▼
+[ Final Blended (real_score, fake_score) ]
+
+CASDE Self-Learning Loop (background daemon):
+  SampleBuffer (uncertain crops) → AttackGenerator (8 families × 5 intensities)
+  → ContinualTrainer.partial_fit() → ValidationGate (AUC / latency)
+  → EvolutionLog (SQLite) → [Promote | Reject]
 ```
 
 ---
@@ -382,6 +426,8 @@ Access the web interface at `http://localhost:3000`.
 - 🎙️ **Audio Deepfake Detection**: Expand backend pipeline to detect synthetic voice cloning and speech manipulation.
 - 📹 **Live Webcam Forensic Stream**: Real-time webcam analysis via WebRTC stream integration.
 - 🔍 **Grad-CAM Heatmap Visualization**: Generate spatial activation heatmaps highlighting altered facial regions directly on crops.
+- 🧬 **GAN Latent-Space Attack Generator**: Upgrade attack generation from transform-based to true latent-space interpolation using a lightweight GAN.
+- ☁️ **Distributed CASDE**: Federated CASDE cycles across multiple deployment nodes sharing evolution logs without sharing raw data.
 
 ---
 

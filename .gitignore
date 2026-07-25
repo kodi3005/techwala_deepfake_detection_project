@@ -31,6 +31,11 @@ backend/uploads/
 uploads/
 *.log
 
+# CASDE – Runtime artifacts (DB & exported model heads)
+backend/casde_evolution.db
+backend/casde_models/
+*.db
+
 # Large Model Files (too big for GitHub)
 *.onnx
 *.pt
